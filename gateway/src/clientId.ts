@@ -1,5 +1,5 @@
 import { Request } from 'express';
 
-export function getClientId(req: Request): string {
-    return req.ip ?? '127.0.0.1';
+export function getClientId(req: Request): string | undefined {
+    return req.clientId ?? req.ip; 
 }

@@ -1,3 +1,48 @@
+# To run tests 
+
+Root scaffold tests:  npm test (from repo root)
+Gateway tests: cd gateway && npm test
+
+# Authentication
+
+API-key based: callers send `X-Api-Key: <key>` on every request. Keys are
+generated with `npm run generate-key`, which prints the raw key once and
+stores only its SHA-256 hash in Redis (set: `apikeys`) — a Redis leak
+alone can't be used to impersonate a client.
+
+## Why API keys, and not JWT / OAuth2 / Basic Auth / mTLS
+
+This is a machine-to-machine API — no login form, no browser, no
+end-user consent screen. That rules out session/cookie auth (nothing to
+store a cookie) and OAuth2 (built for delegated third-party access, which
+doesn't apply here). JWT is normally the *second half* of an auth system
+sitting on top of a login flow issuing tokens — we don't have a login
+flow to issue them from, so JWT would mean building that machinery for no
+real benefit. Basic Auth is functionally similar to an API key but
+implies human-chosen passwords, which invites weak secrets. Mutual TLS is
+the strongest option for machine-to-machine auth, but the operational
+cost of running a certificate authority and rotating client certs isn't
+justified for this exercise. A single, high-entropy, pre-shared secret in
+a header is the simplest thing that correctly fits "identify a known
+automated caller."
+
+## Security
+
+- Keys are hashed (SHA-256) before storage — never stored or logged in
+  plaintext.
+- Requires HTTPS in any real deployment — an API key sent over plain HTTP
+  can be read by anyone on the network path. (Not enforced in this local
+  exercise, since there's no TLS termination configured.)
+- Auth runs before rate limiting, so unauthenticated requests are
+  rejected immediately without spending Redis calls on rate-limit
+  bookkeeping.
+
+## Scalability
+
+Keys live in Redis, not in each gateway instance's code/memory — every
+gateway instance shares the same source of truth, so adding or revoking a
+key takes effect instantly across all instances with no redeploy.
+
 # Rate-Limiting Gateway
 
 A standalone Express service that sits in front of the existing classifier
