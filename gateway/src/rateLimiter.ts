@@ -5,6 +5,13 @@ import { resolveRule } from './rules';
 
 export async function rateLimiter(req: Request, res: Response, next: NextFunction) {
   const clientId = getClientId(req);
+
+  if (!clientId) { 
+    console.error('[rate-limiter] could not determine a client identity for request');
+    res.status(400).json({ error: 'bad_request', message: 'Unable to identify client' });
+    return;
+  }
+  
   const rule = resolveRule(req);
   const bucketKey = `ratelimit:${rule.name}:${clientId}`;
 
