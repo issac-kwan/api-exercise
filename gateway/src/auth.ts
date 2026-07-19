@@ -1,7 +1,8 @@
-/// <reference path="./types/express.d.ts" />
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { redis } from './redisClient';
+import { logger } from '../../logging/logger';
+import { sendError } from './httpError';
 
 export function hashApiKey(key: string): string {
   return crypto.createHash('sha256').update(key).digest('hex');
@@ -11,8 +12,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   const apiKey = req.header('x-api-key');
 
   if (!apiKey) {
-    res.status(401).json({ error: 'unauthorized', message: 'Missing X-API-Key header' });
-    return;
+    return sendError(res, 401, 'unauthorized', 'Missing X-API-Key header');
   }
 
   const hashedKey = hashApiKey(apiKey);
@@ -20,17 +20,16 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   try {
     const isValid = await redis.sismember('apikeys', hashedKey);
     if (!isValid) {
-      res.status(401).json({ error: 'unauthorized', message: 'Invalid API key' });
-      return;
+      logger.warn('Rejected request with invalid API key', { path: req.path });
+      return sendError(res, 401, 'unauthorized', 'Invalid API key');
     }
   } catch (err) {
-    console.error('Redis error during authentication:', (err as Error).message);
-    res.status(503).json({ error: 'service_unavailable' });
-    return;
+    logger.error('Redis error during authentication', {
+      message: err instanceof Error ? err.message : 'unknown',
+    });
+    return sendError(res, 503, 'service_unavailable', 'Authentication temporarily unavailable');
   }
 
-  // Attach the caller's identity so later middleware (the rate limiter)
-  // can key buckets per-client instead of per-IP.
   req.clientId = hashedKey;
-  next();
+  return next();
 }
