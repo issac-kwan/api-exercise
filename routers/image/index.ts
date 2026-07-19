@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import Services from '../../services/Services';
 import { Multer } from 'multer';
+import { validateImageContent } from '../../validation/validateImageContent';
 
 export default function image(services: Services, upload: Multer) {
   const router = Router();
 
-  router.post('/', upload.single('image_file'), async (req, res) => {
+  router.post('/', upload.single('image_file'), validateImageContent, async (req, res) => {
     const file = req.file;
 
     if (!file) {
