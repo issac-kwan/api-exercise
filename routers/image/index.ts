@@ -8,12 +8,22 @@ import {
   getCachedClassification, 
   setCachedClassification 
 } from '../../cache/classificationCache';
+import { asyncHandler } from '../../errors/asyncHandler';
+import { sendError } from '../../errors/sendError';
+import { logger } from '../../logging/logger';
 
 export default function image(services: Services, upload: Multer) {
   const router = Router();
 
-  router.post('/', upload.single('image_file'), validateImageContent, async (req, res) => {
-    const file = req.file;
+  router.post(
+    '/',
+    upload.single('image_file'),
+    validateImageContent,
+    asyncHandler(async (req, res) => {
+      const file = req.file;
+      if (!file) {
+        return sendError(res, 400, 'no_file', 'No file uploaded');
+      }
 
     // 1. Validate file existence
     if (!file) {
