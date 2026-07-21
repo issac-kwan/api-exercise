@@ -1,9 +1,9 @@
-declare global {
-    namespace Express {
-        interface Request {
-            clientId?: string;
-        }
-    }
+import 'express-serve-static-core';
+
+declare module 'express-serve-static-core' {
+  interface Request {
+    clientId?: string;
+  }
 }
 
 export {};
