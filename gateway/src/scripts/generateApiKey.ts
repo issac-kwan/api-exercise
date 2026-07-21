@@ -4,7 +4,7 @@ import { hashApiKey } from '../auth';
 
 async function main() {
     const rawKey = crypto.randomBytes(32).toString('hex'); 
-    await redis.sadd('apikeys', hashApiKey(rawKey));
+    await redis.set(`apikey:${hashApiKey(rawKey)}`, '1');
 
     console.log('New API key generated - copy it now, it will not be shown again:');
     console.log(rawKey); 

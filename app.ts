@@ -1,3 +1,4 @@
+import express from 'express'; 
 import multer from 'multer';
 import routers from './routers';
 import Services from './services/Services';
@@ -5,9 +6,9 @@ import InferApiImageClassificationService, { FakeImageClassificationService } fr
 import { imageFileFilter, MAX_FILE_SIZE_BYTES } from './validation/imageValidation';
 import { multerErrorHandler } from './validation/multerErrorHandler';
 
-const express = require('express')
-const app = express()
+const app = express();
 
+// 1. Service Instantiation
 const classifier = 
   process.argv[2] === 'fake'
   ? new FakeImageClassificationService() 
@@ -15,6 +16,7 @@ const classifier =
   
 const services = new Services(classifier);
 
+// 2. Middleware Configurations (Multer)
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
@@ -22,7 +24,14 @@ const upload = multer({
   fileFilter: imageFileFilter,
 });
 
+// 3. Unauthenticated Public Endpoints (Must be above routers)
+app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
+
+// 4. Application Routes
 app.use('/image', routers.image(services, upload));
+
+// 5. Error Handling Middleware (Must be last)
 app.use(multerErrorHandler);
 
+// 6. Export Statement (Must be at the very bottom)
 export default app;
