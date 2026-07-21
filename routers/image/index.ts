@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { Multer } from 'multer';
 import Services from '../../services/Services';
 import { validateImageContent } from '../../validation/validateImageContent';
-import { logger } from '../../logging/logger'; 
 import { 
   hashFileContent, 
   getCachedClassification, 
