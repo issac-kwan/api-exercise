@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
 import { redis } from './redisClient';
-import { logger } from '../../logging/logger';
+import { logger } from './logger';
 import { sendError } from './httpError';
 
 export function hashApiKey(key: string): string {
@@ -18,7 +18,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   const hashedKey = hashApiKey(apiKey);
 
   try {
-    const isValid = await redis.sismember('apikeys', hashedKey);
+    const isValid = await redis.exists(`apikey:${hashedKey}`);
     if (!isValid) {
       logger.warn('Rejected request with invalid API key', { path: req.path });
       return sendError(res, 401, 'unauthorized', 'Invalid API key');

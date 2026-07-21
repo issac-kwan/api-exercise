@@ -1,5 +1,5 @@
 import app from './app';
-import { logger } from '../../logging/logger';
+import { logger } from '../../logging/logger.ts';
 
 process.on('uncaughtException', (err) => {
   logger.error('Uncaught exception — shutting down', { message: err.message, stack: err.stack });

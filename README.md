@@ -139,58 +139,64 @@ and requires no shared state, so it scales horizontally for free: every
 instance of this service validates independently, with nothing to
 coordinate or synchronize across instances.
 
-## Security hardening
+## Performance and scalability
 
-- **helmet()** — removes the `X-Powered-By` header (don't advertise the
-  framework/version), and sets standard protective headers
-  (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, etc).
-- **No CORS enabled** — this API isn't meant to be called from
-  browser-side JavaScript on arbitrary sites, so the safest default is no
-  `Access-Control-Allow-Origin` header at all. If a specific frontend
-  needs browser access later, add `cors()` scoped to that one origin —
-  never a default-open policy.
-- File upload limits (size, count, content-signature validation) — see
-  the "File upload validation" section above.
+### Caching
 
-## Error handling
+Classification results are cached in Redis, keyed by a SHA-256 hash of
+the uploaded file's bytes (`cache/classificationCache.ts`). Classification
+is deterministic for a given input and model, so a repeat upload of the
+same image returns instantly instead of re-running inference.
 
-Express 4 does not automatically catch a rejected promise inside an
-`async` route handler — without an explicit try/catch or wrapper, a
-failure deep in `services.image.classify()` would leave the request
-hanging with no response at all until the client times out. `asyncHandler`
-(`errors/asyncHandler.ts`) closes this gap by forwarding any rejection to
-Express's centralized error-handling middleware.
+Cache failures fail *open* (classify anyway, don't cache) rather than
+failing the request — a cache is a performance optimization, not a
+safety control, so a Redis outage should degrade gracefully rather than
+take the API down. This is the opposite default from authentication,
+which fails closed — the right failure mode depends on what a check is
+protecting, not a fixed rule applied everywhere.
 
-All errors ultimately reach `errors/errorHandler.ts`, which logs full
-detail (message, stack trace) server-side, and returns only a generic
-message to the caller. Internal errors, library messages, and stack
-traces are never sent in an HTTP response — useful for debugging, but
-also useful to an attacker mapping what's running underneath.
+### Statelessness → horizontal scaling
 
-## Logging
+Every piece of cross-request state (rate-limit buckets, valid API keys,
+the classification cache) lives in Redis, not in any process's memory.
+That means any number of gateway or scaffold-app instances can run
+behind a load balancer with no session affinity required — every
+instance sees identical shared state.
 
-`logging/logger.ts` writes structured, single-line JSON to stdout (not a
-file) — a deliberate 12-factor choice: the process doesn't need to know
-or care where logs end up, and this scales cleanly to multiple instances
-without any local file/disk coordination.
+### Sharding readiness
 
-Two protections are built into the logger itself, not left to each call
-site to remember:
-- **Redaction** — known-sensitive field names (`authorization`,
-  `x-api-key`, etc.) are automatically replaced with `[redacted]`.
-- **Log injection prevention** — string values have newlines stripped
-  before being written, so a malicious value (e.g. a crafted filename)
-  can't forge fake extra log entries.
+API keys are stored as individual Redis keys (`apikey:<hash>`), not as
+members of one shared Set. A single Set is pinned to one shard/node in a
+sharded Redis deployment regardless of how many members it has, becoming
+a bottleneck; individual keys distribute naturally across shards.
+Rate-limit bucket keys (`ratelimit:<rule>:<clientId>`) were already
+structured this way from the start.
+
+### Bounded latency
+
+Redis commands have an explicit timeout (`commandTimeout`), so a
+degraded Redis fails fast into the existing fail-closed handling instead
+of silently slowing down every request.
+
+### Connection reuse
+
+The gateway's proxy uses a keep-alive HTTP agent when forwarding to the
+downstream service, avoiding a fresh TCP handshake on every request.
+
+### Load balancing
+
+No special configuration needed beyond correctly setting `trust proxy`
+to match the actual number of proxy hops in front of the gateway — the
+statelessness above means any instance can serve any request.
 
 ## What I'd add with more time
 
-- A real logging library (`pino`/`winston`) instead of a hand-rolled
-  logger — this exercise's version covers the core requirements
-  (structured, redacted, stdout) without the extra dependency surface,
-  but a production system benefits from log levels configurable at
-  runtime, better performance under load, and integrations with log
-  shippers.
-- Dependency vulnerability scanning in CI (`npm audit` / Snyk).
-- A rate limit specifically on failed-auth attempts, to slow down API key
-  brute-forcing (distinct from the general per-client rate limit already
-  in place).
+- Redis Cluster for true horizontal scaling of the datastore itself —
+  not needed at this scale, but the key-naming choices above are made
+  specifically so that migration wouldn't require a data-model rewrite.
+- A CDN or edge cache in front of the gateway for identical repeat
+  requests from different clients, beyond what per-content caching alone
+  covers.
+- Load testing to actually validate assumptions here (e.g. confirming
+  75ms is a sensible Redis command timeout) rather than reasoning from
+  first principles alone.

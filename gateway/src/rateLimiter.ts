@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { getClientId } from './clientId';
 import { checkRateLimit } from './redisClient';
 import { resolveRule } from './rules';
-import { logger } from '../../logging/logger';
+import { logger } from './logger';
 import { sendError } from './httpError';
 
 export async function rateLimiter(req: Request, res: Response, next: NextFunction) {
