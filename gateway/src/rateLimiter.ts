@@ -4,6 +4,7 @@ import { checkRateLimit } from './redisClient';
 import { resolveRule } from './rules';
 import { logger } from './logger';
 import { sendError } from './httpError';
+import { rateLimiterDecisions } from './metrics';
 
 export async function rateLimiter(req: Request, res: Response, next: NextFunction) {
   const clientId = getClientId(req);
@@ -22,13 +23,14 @@ export async function rateLimiter(req: Request, res: Response, next: NextFunctio
     res.set('X-RateLimit-Remaining', String(Math.floor(result.tokens)));
 
     if (!result.allowed) {
+      rateLimiterDecisions.inc({ rule: rule.name, outcome: 'blocked' });
       res.set('Retry-After', '1');
       return sendError(
         res, 429, 'rate_limit_exceeded',
         `Rate limit exceeded for "${rule.name}". Try again later.`
       );
     }
-
+    rateLimiterDecisions.inc({ rule: rule.name, outcome: 'allowed' });
     return next();
   } catch (err) {
     logger.error('Redis error in rate limiter — blocking request', {

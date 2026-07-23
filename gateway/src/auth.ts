@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { redis } from './redisClient';
 import { logger } from './logger';
 import { sendError } from './httpError';
+import { authDecisions } from './metrics';
 
 export function hashApiKey(key: string): string {
   return crypto.createHash('sha256').update(key).digest('hex');
@@ -21,6 +22,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     const isValid = await redis.exists(`apikey:${hashedKey}`);
     if (!isValid) {
       logger.warn('Rejected request with invalid API key', { path: req.path });
+      authDecisions.inc({ outcome: 'rejected' });
       return sendError(res, 401, 'unauthorized', 'Invalid API key');
     }
   } catch (err) {
@@ -30,6 +32,7 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     return sendError(res, 503, 'service_unavailable', 'Authentication temporarily unavailable');
   }
 
+  authDecisions.inc({ outcome: 'allowed' });
   req.clientId = hashedKey;
   return next();
 }
