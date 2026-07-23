@@ -4,6 +4,7 @@ import http from 'http';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { authenticate } from './auth';
 import { rateLimiter } from './rateLimiter';
+import { registry } from './metrics';
 
 const keepAliveAgent = new http.Agent({ keepAlive: true });
 
@@ -12,6 +13,10 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 app.get('/healthz', (_req, res) => res.status(200).json({ status: 'ok' }));
+app.get('/metrics', async (_req, res) => {
+  res.set('Content-Type', registry.contentType);
+  res.end(await registry.metrics());
+});
 
 app.use(authenticate);
 app.use(rateLimiter);
